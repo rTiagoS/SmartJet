@@ -24,12 +24,8 @@ void handleRoot();
 void handleWifi();
 void handleWifiSave();
 void handleCredentialsRequest();
-char* set_jetsTopic(unsigned long ID);
-char* set_rechargeTopic(unsigned long ID);
-char* set_addTopic(unsigned long ID);
-char* set_feedbackTopic(unsigned long ID);
 String retrieveAction(String brokerPayload);
-String  retrieveID(String  brokerPayload);
+String retrieveID(String  brokerPayload);
 void  publish_feedbackCadastro( unsigned long ID);
 void  publish_feedbackfirstLogin(const char* topico, unsigned long ID);
 
@@ -70,11 +66,6 @@ const char topico_Buffer[] = "/iainovation/espirrinho/buffer";
 
 const char* topicoSmartjet = "/iacinovation/smarjet/tiago.ramos121@gmail.com/";
 
-
-//const char* topicoJets = set_jetsTopic(esp_chipID); /* Tópico para envio de quantiadde de Jets. */
-//const char* topicoRecarga = set_rechargeTopic(esp_chipID); /* Tópico para ativar Modo Recarga. */
-//const char* topicoCadastro = set_addTopic(esp_chipID); /* Tópico para ativar Modo Cadastro. */
-//const char* topicoFeedback = set_feedbackTopic(esp_chipID); /* Tópico para feedback de erro. */
 
 
 /* Configuração de Rede do Broker MQTT -------------------- */
@@ -139,12 +130,6 @@ void setup()
 
   setupBroker();
 
-  /*
-  Serial.println(topicoJets);
-  Serial.println(topicoRecarga);
-  Serial.println(topicoCadastro);
-  Serial.println(topicoFeedback);
-  */
    
 }
 
@@ -319,49 +304,6 @@ void enviaBuffer(int Acionamentos)
   
 } // Fim da função enviaBuffer
 
-char* set_jetsTopic(unsigned long ID)
-{
- /* 
-  * Tópico em que o SmartJet enviará a quantidades de jets. 
-  */
-  char * topicBuffer;
-  topicBuffer = (char*)malloc(sizeof(char)*50);
-  sprintf(topicBuffer, "/smartjet/jets/%lu/", ID);  
-  return topicBuffer;
-}
-
-char* set_rechargeTopic(unsigned long ID)
-{
-  /* 
-   * Tópico em que o Smarjet receberá comando para ativar Modo Recarga.
-   */
-   char *rechargeTopic;
-   rechargeTopic = (char*)malloc(sizeof(char)*50);
-   sprintf(rechargeTopic, "/smartjet/recharge/%lu/", ID);
-   return rechargeTopic;
-}
-
-char* set_addTopic(unsigned long ID)
-{
-  /* 
-   * Tópico em que o Smarjet receberá comando para ativar Modo Cadastro.
-   */
-   char *addTopic;
-   addTopic = (char*)malloc(sizeof(char)*50);
-   sprintf(addTopic, "/smartjet/add/%lu/", ID);
-   return addTopic;
-}
-
-char* set_feedbackTopic(unsigned long ID)
-{
-  /* 
-   * Tópico em que o Smarjet enviará status de código de falha ou sucesso ao broker.
-   */
-  char* feedbackTopic;
-  feedbackTopic = (char*)malloc(sizeof(char)*50);
-  sprintf(feedbackTopic, "/smartjet/feedback_code/%lu/", ID);
-  return feedbackTopic;
-}
 
 void callback(char* topic, byte* payload, unsigned int length)
 {
@@ -398,37 +340,6 @@ void callback(char* topic, byte* payload, unsigned int length)
       publish_feedbackfirstLogin(topicoSmartjet, esp_chipID);
     }
   }
-  
-  /*
-  if (strcmp(topic,topicoCadastro)==0)
-  {
-    if (s.equals("cadastrar"))
-    {
-      modoCadastro = true; 
-      Serial.println("");
-      Serial.print("Ativando Modo Cadastro...");
-    }
-    else
-    {
-      client.publish(topicoFeedback, "Comando para Modo Cadastro não reconhecido.");
-    }
-  }
-  else if (strcmp(topic,topicoRecarga)==0)
-  {
-    if(s.equals("recarregar"))
-    {
-      modoRecarga = true;
-      Serial.println("");
-      Serial.print("Ativando Modo Recarga...");
-    }
-    else
-    {
-      client.publish(topicoFeedback, "Comando para Modo Recarga não reconhecido.");
-      Serial.println("");
-      Serial.print("Feedback Enviado");
-    }
-    
-  } */
 }
 
 String retrieveID( String  brokerPayload)
