@@ -30,7 +30,7 @@ void sensorAproximidade()
     {
       ligaBomba(); // Aciona a bomba por um tempo máximo definido.
       delay(1500); // Mantém a bomba acionada por um tempo.
-      enviaBuffer(qtde_Acionamentos);
+      publishBuffer(qtde_Acionamentos, 75, esp_chipID, topicoSmartjet);
       
       desligaBomba();
       qtde_Acionamentos +=1;

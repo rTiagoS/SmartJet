@@ -13,21 +13,31 @@
 void sensorAproximidade();
 void ligaBomba();
 void desligaBomba();
+
+
 void startWiFiAP();
 void startWebServer();
 void startWiFiClient();
 void setupBroker();
 void reconnectBroker();
+
 void saveCredentials();
+void saveEmail();
 void loadCredentials();
+void loadEmail();
+
 void handleRoot();
 void handleWifi();
 void handleWifiSave();
 void handleCredentialsRequest();
+void handleSaveEmail();
+void handleMasterID();
+
 String retrieveAction(String brokerPayload);
 String retrieveID(String  brokerPayload);
 void  publish_feedbackCadastro(const char* topico, unsigned long ID);
 void  publish_feedbackfirstLogin(const char* topico, unsigned long ID);
+void publishBuffer(int Acionamentos, int Level, unsigned long ID);
 char * set_topicoSmarjet (const char * user_email);
 
 
@@ -311,7 +321,7 @@ void reconnectBroker()
       client.publish(topicoSmartjet,"Conectado ao broker"); // Once connected, publish an announcement...
       client.subscribe(topicoSmartjet);
       Serial.println("");
-      Serial.println("Inscrições Realizadas com Sucesso!");
+      Serial.println("Inscrição no tópico realizada!");
     } //End of if section
     else 
     { 
@@ -324,19 +334,32 @@ void reconnectBroker()
 
 
 /* Envia dados para o servidor Broker ----------------------- */
-void enviaBuffer(int Acionamentos)
+void publishBuffer(int Acionamentos, int Level, unsigned long ID, const char* topico)
 {
   
- /* Envia um buffer para o Broker em forma de array ([x,y]) contendo duas principais informações:
- *  x: 1 (bomba acionada) ou 0 (bomba não acionada).
- *  y: 0 ("cheio") ou 1 ("metade") ou 2 ("quase vazio"). */
- 
+ /* Envia um buffer para o Broker contendo os dados dos sensores em formato JSON: 
+  *  {"ID":122313, "Jets": 15, "Level":75}  
+ /*
   static char Buffer[15]; // Por ser um buffer estático, a variável não é destruída ao término da função. Evita bugs.
   memset(Buffer, 0, sizeof(Buffer)); // Limpa o buffer para receber novos dados.
   sprintf(Buffer, "%d", Acionamentos); // Envia os dados x,y para o buffer estático.
-  client.publish(topico_Buffer, Buffer); // Publica o buffer no Broker.
+  client.publish(topico_Buffer, Buffer); // Publica o buffer no Broker. 
+  */
+
+  // Declaração de objetos.
+  DynamicJsonDocument doc(64);
+  char sensorData[64];
+
+  // Formatação JSON
+  doc["ID"] = ID;
+  doc["Jets"] = Acionamentos;
+  doc["Level"] = Level;
+  serializeJson(doc, sensorData);
   
-} // Fim da função enviaBuffer
+  // Publica mensagem de feedback no tópico especificado
+  client.publish(topico,sensorData);
+  
+} // Fim da função publishBuffer
 
 
 void callback(char* topic, byte* payload, unsigned int length)
@@ -352,26 +375,26 @@ void callback(char* topic, byte* payload, unsigned int length)
   Serial.println(s);
 
 
-  if (esp_chipID == (retrieveID(s).toInt()))
+  if (esp_chipID == (retrieveID(s).toInt())) // Se a mensagem recebida tiver o ID deste ESP:
   {
-    if ((retrieveAction(s)).equals("cadastrar"))
+    if ((retrieveAction(s)).equals("cadastrar")) // Se a ação requerida for cadastrar:
     {
-      modoCadastro = true; 
+      modoCadastro = true; // Aciona modo cadastro.
       Serial.println("");
       Serial.print("Ativando Modo Cadastro...");
     }
-    else if ((retrieveAction(s)).equals("recarregar"))
+    else if ((retrieveAction(s)).equals("recarregar")) // Se a ação requerida for recarregar
     {
-      modoRecarga = true;
+      modoRecarga = true; // Aciona modo Recarga.
       Serial.println("");
       Serial.print("Ativando Modo Recarga...");
     }
   }
-  else if (retrieveID(s) == "all")
+  else if (retrieveID(s) == "all") // Se a mensagem recebida tiver o ID all:
   {
-    if (retrieveAction(s).equals("login"))
+    if (retrieveAction(s).equals("login")) // Se a ação requerida for login:
     {
-      publish_feedbackfirstLogin(topicoSmartjet, esp_chipID);
+      publish_feedbackfirstLogin(topicoSmartjet, esp_chipID); // Publica a quantidade de acionamentos atual.
     }
   }
 } // Fim da função callback.
@@ -446,7 +469,8 @@ void  publish_feedbackfirstLogin(const char* topico, unsigned long ID)
 
   // Formatação JSON
   doc["ID"] = ID;
-  doc["Feedback"] = "13";
+  doc["Jets"] = "0";
+  doc["Level"] = "100";
   serializeJson(doc, feedback_firstLogin);
   
   // Publica mensagem de feedback no tópico especificado
