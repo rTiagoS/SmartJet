@@ -26,8 +26,9 @@ void handleWifiSave();
 void handleCredentialsRequest();
 String retrieveAction(String brokerPayload);
 String retrieveID(String  brokerPayload);
-void  publish_feedbackCadastro( unsigned long ID);
+void  publish_feedbackCadastro(const char* topico, unsigned long ID);
 void  publish_feedbackfirstLogin(const char* topico, unsigned long ID);
+char * set_topicoSmarjet (const char * user_email);
 
 
 
@@ -45,6 +46,8 @@ unsigned long tempoReferencia{0};
 unsigned long esp_chipID = ESP.getChipId();
 bool modoRecarga{false};
 bool modoCadastro{false};
+bool bEmailCadastrado{false};
+bool bEmailCadastradoComSucesso{false};
 
 
 // ===============================================================================
@@ -63,8 +66,8 @@ const char *softAP_password = APPSK;
 /* Tópicos no broker em que serão publicados os dados ------*/
 const char topico_Buffer[] = "/iainovation/espirrinho/buffer"; 
 
-
-const char* topicoSmartjet = "/iacinovation/smarjet/tiago.ramos121@gmail.com/";
+const char* topicoSmartjet;
+//const char* topicoSmartjet = "/iacinovation/smarjet/tiago.ramos121@gmail.com/";
 
 
 
@@ -81,6 +84,7 @@ PubSubClient client(SmartJetClient);
 /* Don't set this wifi credentials. They are configurated at runtime and stored on EEPROM */
 char ssid[33] = "";
 char password[65] = "";
+char email[40] = "";
 
 
 // Web server
@@ -123,14 +127,26 @@ void setup()
   startWebServer();
   
   loadCredentials(); // Load WLAN credentials from network
+
+  loadEmail(); // Load User Email from EEPROM.
   
-  connect = strlen(ssid) > 0; // Request WLAN connect if there is a SSID  
+  connect = strlen(ssid) > 0; // Request WLAN connect if there is a SSID.  
+
+  bEmailCadastrado = (strlen(email) > 0); // Change Status if there is a User Email.
 
   startWiFiClient();
 
-  setupBroker();
-
-   
+  if (bEmailCadastrado)
+  {
+    topicoSmartjet = set_topicoSmarjet(email); // Melhorar aqui... atribuir dentro da função.
+    Serial.println("");
+    Serial.println("E-mail do Usuario: ");
+    Serial.print(topicoSmartjet);
+    Serial.println("\n");
+    
+    setupBroker();
+    bEmailCadastradoComSucesso = true;
+  }  
 }
 
 
@@ -153,15 +169,17 @@ void loop()
     
     client.loop();
 
-    if (modoCadastro)
+    if (modoCadastro) // Se o usuário solicitar novo cadastro:
     {
-      tempoReferencia = millis();
-      startWiFiAP();
+      tempoReferencia = millis(); // Reinicia a contagem do tempo
+      startWiFiAP(); // Habilita a Rede Local
       AindaNaoDesativou = true;
+      
       Serial.println("");
       Serial.println("Modo Cadastro Ativado");
-      publish_feedbackCadastro(topicoSmartjet, esp_chipID);
-      modoCadastro = false;
+      
+      publish_feedbackCadastro(topicoSmartjet, esp_chipID); // Envia feedback que modo cadastro foi habilitado.
+      modoCadastro = false; // Habilita
       
     }
     
@@ -169,6 +187,23 @@ void loop()
   else
   {
     server.handleClient();  // Client Handling
+    
+    if (!bEmailCadastradoComSucesso)
+    {
+      loadEmail();
+      bEmailCadastrado = strlen(email) > 0; 
+      if (bEmailCadastrado)
+      {
+        topicoSmartjet = set_topicoSmarjet(email); // Melhorar aqui
+        Serial.println("");
+        Serial.println("E-mail do Usuario: ");
+        Serial.print(topicoSmartjet);
+        Serial.println("\n");
+        
+        setupBroker();
+        bEmailCadastradoComSucesso = true;
+      }
+    }
   }
 
   
@@ -240,6 +275,7 @@ void startWebServer()
   server.on("/wifisave", handleWifiSave);
   server.on("/credentials", handleCredentialsRequest);
   server.on("/master/id", handleMasterID);
+  server.on("/user_auth", handleSaveEmail);
   server.begin(); // Web server start
   Serial.println("HTTP server started");
 }
@@ -274,8 +310,6 @@ void reconnectBroker()
       Serial.println("connected");
       client.publish(topicoSmartjet,"Conectado ao broker"); // Once connected, publish an announcement...
       client.subscribe(topicoSmartjet);
-      //client.subscribe(topicoRecarga);
-      //client.subscribe(topicoCadastro);
       Serial.println("");
       Serial.println("Inscrições Realizadas com Sucesso!");
     } //End of if section
@@ -340,28 +374,38 @@ void callback(char* topic, byte* payload, unsigned int length)
       publish_feedbackfirstLogin(topicoSmartjet, esp_chipID);
     }
   }
-}
+} // Fim da função callback.
 
 String retrieveID( String  brokerPayload)
 {
+  /*
+   *  Decodifica a mensagem json da ação a ser executada.
+   */
+   
   // Parsing
   const size_t bufferSize = JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(8) + 370;
   DynamicJsonDocument doc(bufferSize);
   deserializeJson(doc, brokerPayload);
+  
   // Parameters 
   String ID = doc["ID"];
   Serial.println("");
   Serial.println("ID Retrieved: ");
   Serial.print(ID);
   return ID;  
-}
+} // Fim da função retrieveID.
 
 String retrieveAction(String brokerPayload)
 {
+  /*
+   *  Decodifica a mensagem json da ação a ser executada.
+   */
+   
   // Parsing
   const size_t bufferSize = JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(8) + 370;
   DynamicJsonDocument doc(bufferSize);
   deserializeJson(doc, brokerPayload);
+  
   // Parameters 
   String action = doc["Action"];
   Serial.println("");
@@ -369,42 +413,57 @@ String retrieveAction(String brokerPayload)
   Serial.print(action);
   return action;  
   
-}
+} // Fim da função retrieAction.
 
 void  publish_feedbackCadastro(const char* topico, unsigned long ID)
 {
    /* 
-   * Tópico em que o Smarjet enviará feedback do status da conexão
+   * Indica ao Broker que o Modo Cadastro foi habilitado.
    */
- 
+   
+  // Declaração de objetos.
   DynamicJsonDocument doc(64);
   char feedback_modoCadastro[64];
-  
+
+  // Formatação JSON
   doc["ID"] = ID;
   doc["Feedback"] = "Modo Cadastro Ativado";
   serializeJson(doc, feedback_modoCadastro);
 
+  // Publica mensagem de feedback no tópico especificado
   client.publish(topico,feedback_modoCadastro);
-}
+} // Fim da função publish_feedbackCadastro.
 
 void  publish_feedbackfirstLogin(const char* topico, unsigned long ID)
 {
    /* 
    * Tópico em que o Smarjet enviará feedback do status da conexão
    */
- 
+
+  // Declaração de objetos.
   DynamicJsonDocument doc(64);
   char feedback_firstLogin[64];
-  
+
+  // Formatação JSON
   doc["ID"] = ID;
   doc["Feedback"] = "13";
   serializeJson(doc, feedback_firstLogin);
-
+  
+  // Publica mensagem de feedback no tópico especificado
   client.publish(topico,feedback_firstLogin);
+} // Fim da função publish_feedbackfirstLogin
+
+
+char * set_topicoSmarjet (const char * user_email)
+{
+  char * email;
+  
+  // Aloca um espaço de memória na HEAP enquanto o programa estiver sendo executado.
+  email = (char*)malloc(sizeof(char)*50); 
+  memset(email, 0, sizeof(char)*50);
+  sprintf(email, "/iacinovation/smarjet/%s/", user_email);
+  return email;
 }
-
-
-
 
 
 

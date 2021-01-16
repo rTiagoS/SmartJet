@@ -127,16 +127,39 @@ void handleCredentialsRequest()
 
 void handleMasterID()
 {
+  
+  Serial.println("");
   Serial.println("Master ID Requested: ");
+  Serial.print(esp_chipID);
+
+  String buf;
+  
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "-1");
-
-  Serial.print(esp_chipID);
+  
   DynamicJsonDocument doc(64);
   doc["HWID"] = esp_chipID;
-  String buf;
+  
   serializeJson(doc, buf);
   server.send(200, F("application/json"), buf);
-  Serial.println(F("done."));
+
+  Serial.println("");
+  Serial.println(F("ID Entregue."));
+}
+
+void handleSaveEmail()
+{
+  Serial.println("\n Salvando E-mail ...");
+  server.arg("email").toCharArray(email, sizeof(email) - 1);
+  
+  server.sendHeader("Location", "wifi", true);
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "-1");
+  
+  server.send(302, "text/plain", "");    // Empty content inhibits Content-length header so we have to close the socket ourselves.
+  server.client().stop(); // Stop is needed because we sent no content length
+  saveEmail();
+  Serial.println("\n Email Handle Done");
 }

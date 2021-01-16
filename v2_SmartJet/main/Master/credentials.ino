@@ -25,3 +25,30 @@ void saveCredentials() {
   EEPROM.commit();
   EEPROM.end();
 }
+
+void saveEmail()
+{
+  EEPROM.begin(512);
+  char ok[2+1] = "OK";
+  EEPROM.put(0 + sizeof(ssid) + sizeof(password) + sizeof(ok), email);
+  char ok_email[2+1] = "ok";
+  EEPROM.put(0 + sizeof(ssid) + sizeof(password) + sizeof(ok) + sizeof(email), ok_email);
+  EEPROM.commit();
+  EEPROM.end();
+}
+
+void loadEmail()
+{
+  EEPROM.begin(512);
+  char ok[2+1] = "OK";
+  char ok_email[2+1] = "ok"; 
+  EEPROM.get(0 + sizeof(ssid) + sizeof(password) + sizeof(ok), email);
+  EEPROM.get(0 + sizeof(ssid) + sizeof(password) + sizeof(ok) + sizeof(email), ok_email);
+  if (String(ok_email) != String("ok"))
+  {
+    email[0] = 0;
+  }
+  EEPROM.end();
+  Serial.println("\nRecovered email:");
+  Serial.println(email);  
+}
