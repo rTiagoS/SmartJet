@@ -8,24 +8,28 @@
 
 
 
-// ===============================================================================
-// --- Protótipo das Funções utilizadas ---
+// ============================================================================= //
+// --- Protótipo das Funções utilizadas --- //.
+
+// Acionadores e Dispenser                                      
 void sensorAproximidade();
 void ligaBomba();
 void desligaBomba();
 
-
+// Configurações e setup do Broker
 void startWiFiAP();
 void startWebServer();
 void startWiFiClient();
 void setupBroker();
 void reconnectBroker();
 
+// Armazenamento de dados na EEPROM
 void saveCredentials();
 void saveEmail();
 void loadCredentials();
 void loadEmail();
 
+// Rotas do servidor Web
 void handleRoot();
 void handleWifi();
 void handleWifiSave();
@@ -33,31 +37,51 @@ void handleCredentialsRequest();
 void handleSaveEmail();
 void handleMasterID();
 
+// Decodificação do Json proveniente do Broker
 String retrieveAction(String brokerPayload);
 String retrieveID(String  brokerPayload);
+
+// Tópicos Broker
 void  publish_feedbackCadastro(const char* topico, unsigned long ID);
-void  publish_feedbackfirstLogin(const char* topico, unsigned long ID);
-void publishBuffer(int Acionamentos, int Level, unsigned long ID);
-char * set_topicoSmarjet (const char * user_email);
+void  publish_genericResponse(const char* topico, unsigned long ID);
+void  publishBuffer(int Acionamentos, int Level, unsigned long ID);
+char * set_publishTopic (const char * user_email);
+char * set_subscribeTopic (const char * user_email);
+
+char * set_brokerClientID (unsigned long ID);
 
 
 
-// ===============================================================================
-// --- Mapeamento de Hardware ---
+// ===============================================================================                  
+// --- Mapeamento de Hardware --- //
 #define pinoBomba       03
 #define pinoProximidade 00
 
 
 // ===============================================================================
 // --- Variáveis Globais ---
+
 int qtde_Acionamentos{1};
+
 bool AindaNaoDesativou{true};
-unsigned long tempoReferencia{0};
-unsigned long esp_chipID = ESP.getChipId();
+
 bool modoRecarga{false};
+
 bool modoCadastro{false};
+
 bool bEmailCadastrado{false};
+
 bool bEmailCadastradoComSucesso{false};
+
+bool connect; // Should I connect to WLAN asap? 
+
+unsigned long tempoReferencia{0};
+
+unsigned long lastConnectTry = 0; // Last time I tried to connect to WLAN 
+
+unsigned long esp_chipID = ESP.getChipId();
+
+unsigned int status = WL_IDLE_STATUS; // Current WLAN status 
 
 
 // ===============================================================================
@@ -65,30 +89,21 @@ bool bEmailCadastradoComSucesso{false};
 
 
 /* Set these to your desired softAP credentials. They are not configurable at runtime */
-#ifndef APSSID
-#define APSSID "SmarJet_2020"
-#define APPSK  "12345678"
-#endif
-
-const char *softAP_ssid = APSSID;
-const char *softAP_password = APPSK;
+const char *softAP_ssid = "SmarJet_2020";
+const char *softAP_password = "12345678";
 
 /* Tópicos no broker em que serão publicados os dados ------*/
 const char topico_Buffer[] = "/iainovation/espirrinho/buffer"; 
 
-const char* topicoSmartjet;
+const char* listenerTopic;
+const char* publishTopic;
 //const char* topicoSmartjet = "/iacinovation/smarjet/tiago.ramos121@gmail.com/";
-
+const char* broker_clientID = set_brokerClientID(esp_chipID);
 
 
 /* Configuração de Rede do Broker MQTT -------------------- */
 const char* mqttServer = "179.191.235.42";
 const int mqttPort = 1883;
-
-/* Instanciação de objetos para comunicação com o broker ---*/
-WiFiClient SmartJetClient;
-PubSubClient client(SmartJetClient);
-
 
 
 /* Don't set this wifi credentials. They are configurated at runtime and stored on EEPROM */
@@ -97,22 +112,17 @@ char password[65] = "";
 char email[40] = "";
 
 
+/* Instanciação de objetos para conexão com o broker ---*/
+WiFiClient SmartJetClient;
+PubSubClient client(SmartJetClient);
+
+
 // Web server
 ESP8266WebServer server(80);
 
 /* Soft AP network parameters */
 IPAddress apIP(172, 217, 28, 1);
 IPAddress netMsk(255, 255, 255, 0);
-
-
-/** Should I connect to WLAN asap? */
-boolean connect;
-
-/** Last time I tried to connect to WLAN */
-unsigned long lastConnectTry = 0;
-
-/** Current WLAN status */
-unsigned int status = WL_IDLE_STATUS;
 
 
 void setup()
@@ -148,10 +158,11 @@ void setup()
 
   if (bEmailCadastrado)
   {
-    topicoSmartjet = set_topicoSmarjet(email); // Melhorar aqui... atribuir dentro da função.
+    listenerTopic = set_subscribeTopic(email); // Melhorar aqui... atribuir dentro da função.
+    publishTopic = set_publishTopic(email);
     Serial.println("");
     Serial.println("E-mail do Usuario: ");
-    Serial.print(topicoSmartjet);
+    Serial.print(listenerTopic);
     Serial.println("\n");
     
     setupBroker();
@@ -167,7 +178,7 @@ void loop()
     if (AindaNaoDesativou) // Esse IF só é TRUE uma vez após o intervalo de 2 minutos.
     {
       WiFi.softAPdisconnect(true); // Desativa o Access Point
-      Serial.println("Rede AP Desligada!");
+      Serial.println("\nRede AP Desligada!");
       AindaNaoDesativou = false;
     }
  
@@ -181,17 +192,20 @@ void loop()
 
     if (modoCadastro) // Se o usuário solicitar novo cadastro:
     {
-      tempoReferencia = millis(); // Reinicia a contagem do tempo
+      
       startWiFiAP(); // Habilita a Rede Local
-      AindaNaoDesativou = true;
       
       Serial.println("");
       Serial.println("Modo Cadastro Ativado");
       
-      publish_feedbackCadastro(topicoSmartjet, esp_chipID); // Envia feedback que modo cadastro foi habilitado.
-      modoCadastro = false; // Habilita
+      publish_feedbackCadastro(publishTopic, esp_chipID); // Envia feedback que modo cadastro foi habilitado.
       
-    }
+      AindaNaoDesativou = true;
+      modoCadastro = false; // Habilita
+      tempoReferencia = millis(); // Reinicia a contagem do tempo
+      
+      
+    } // fim do if
     
   } // fim do if 
   else
@@ -204,10 +218,11 @@ void loop()
       bEmailCadastrado = strlen(email) > 0; 
       if (bEmailCadastrado)
       {
-        topicoSmartjet = set_topicoSmarjet(email); // Melhorar aqui
+        listenerTopic = set_subscribeTopic(email); // Melhorar aqui... atribuir dentro da função.
+        publishTopic = set_publishTopic(email);
         Serial.println("");
         Serial.println("E-mail do Usuario: ");
-        Serial.print(topicoSmartjet);
+        Serial.print(email);
         Serial.println("\n");
         
         setupBroker();
@@ -286,6 +301,7 @@ void startWebServer()
   server.on("/credentials", handleCredentialsRequest);
   server.on("/master/id", handleMasterID);
   server.on("/user_auth", handleSaveEmail);
+  server.on("/user_credentials", handleUserCredentials);
   server.begin(); // Web server start
   Serial.println("HTTP server started");
 }
@@ -315,12 +331,13 @@ void reconnectBroker()
   {
     Serial.print("Connecting to Broker...");
   
-    if (client.connect("SmarJetClient_v1")) // mudar para incoporar o ID do smarjet.
+    if (client.connect(broker_clientID)) // mudar para incoporar o ID do smarjet.
     { 
-      Serial.println("connected");
-      client.publish(topicoSmartjet,"Conectado ao broker"); // Once connected, publish an announcement...
-      client.subscribe(topicoSmartjet);
-      Serial.println("");
+      Serial.print("\nconnected\nClient ID: ");
+      Serial.print(broker_clientID);
+      publish_genericResponse(publishTopic, esp_chipID); // Once connected, publish an announcement...
+      client.subscribe(listenerTopic);
+      Serial.println("\n");
       Serial.println("Inscrição no tópico realizada!");
     } //End of if section
     else 
@@ -394,7 +411,7 @@ void callback(char* topic, byte* payload, unsigned int length)
   {
     if (retrieveAction(s).equals("login")) // Se a ação requerida for login:
     {
-      publish_feedbackfirstLogin(topicoSmartjet, esp_chipID); // Publica a quantidade de acionamentos atual.
+      publish_genericResponse(publishTopic, esp_chipID); // Publica a quantidade de acionamentos atual.
     }
   }
 } // Fim da função callback.
@@ -457,7 +474,7 @@ void  publish_feedbackCadastro(const char* topico, unsigned long ID)
   client.publish(topico,feedback_modoCadastro);
 } // Fim da função publish_feedbackCadastro.
 
-void  publish_feedbackfirstLogin(const char* topico, unsigned long ID)
+void  publish_genericResponse(const char* topico, unsigned long ID)
 {
    /* 
    * Tópico em que o Smarjet enviará feedback do status da conexão
@@ -475,18 +492,40 @@ void  publish_feedbackfirstLogin(const char* topico, unsigned long ID)
   
   // Publica mensagem de feedback no tópico especificado
   client.publish(topico,feedback_firstLogin);
-} // Fim da função publish_feedbackfirstLogin
+} // Fim da função publish_genericResponse
 
 
-char * set_topicoSmarjet (const char * user_email)
+char * set_publishTopic (const char * user_email)
 {
-  char * email;
+  char * topic_toPublish;
   
   // Aloca um espaço de memória na HEAP enquanto o programa estiver sendo executado.
-  email = (char*)malloc(sizeof(char)*50); 
-  memset(email, 0, sizeof(char)*50);
-  sprintf(email, "/iacinovation/smarjet/%s/", user_email);
-  return email;
+  topic_toPublish = (char*)malloc(sizeof(char)*50); 
+  memset(topic_toPublish, 0, sizeof(char)*50);
+  sprintf(topic_toPublish, "/iacinovation/smarjet/esp/%s/", user_email);
+  return topic_toPublish;
+}
+
+char * set_subscribeTopic (const char * user_email)
+{
+  char * topic_toSubscribe;
+  
+  // Aloca um espaço de memória na HEAP enquanto o programa estiver sendo executado.
+  topic_toSubscribe = (char*)malloc(sizeof(char)*50); 
+  memset(topic_toSubscribe, 0, sizeof(char)*50);
+  sprintf(topic_toSubscribe, "/iacinovation/smarjet/app/%s/", user_email);
+  return topic_toSubscribe;
+}
+
+
+
+char * set_brokerClientID (unsigned long ID)
+{
+  char * client_name;
+  client_name = (char*)malloc(sizeof(char)*30);
+  memset(client_name, 0, sizeof(char)*30);
+  sprintf(client_name, "SmartJetClient_%lu", ID);
+  return client_name;
 }
 
 

@@ -163,3 +163,27 @@ void handleSaveEmail()
   saveEmail();
   Serial.println("\n Email Handle Done");
 }
+
+void handleUserCredentials()
+{
+  Serial.println("\n Handling User Credentials...");
+
+  const size_t bufferSize = JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(8) + 370;
+  DynamicJsonDocument doc(bufferSize);
+  deserializeJson(doc, server.arg("plain"));
+  // Parameters
+  const char* _email= doc["email"]; // "Leanne Graham"
+  const char* _ssid= doc["ssid"]; // "Leanne Graham"
+  const char* _password= doc["pass"]; // "Bret"
+  server.send(204, "text/plain", "");    // Empty content inhibits Content-length header so we have to close the socket ourselves.
+  server.client().stop(); // Stop is needed because we sent no content length
+  
+  // Output to serial monitor
+  Serial.print("\nSSID: ");
+  Serial.println(_ssid);
+  Serial.print("\nPassword: "); 
+  Serial.println(_password);
+  Serial.print("\nEmail: "); 
+  Serial.println(_email);
+  
+}
