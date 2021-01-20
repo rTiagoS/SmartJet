@@ -9,7 +9,7 @@
 
 
 // ============================================================================= //
-// --- Protótipo das Funções utilizadas --- //.
+// --- Protótipo das Funções utilizadas --- //
 
 // Acionadores e Dispenser                                      
 void sensorAproximidade();
@@ -141,7 +141,6 @@ void setup()
   digitalWrite(pinoBomba, LOW); 
 
   
-
   startWiFiAP();
 
   startWebServer();

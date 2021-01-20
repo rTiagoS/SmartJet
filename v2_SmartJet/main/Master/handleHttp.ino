@@ -117,6 +117,7 @@ void handleCredentialsRequest()
  
   doc["ssid"] = ssid;
   doc["pass"] = password;
+  doc["email"] = email;
       
   Serial.print(F("Stream..."));
   String buf;
