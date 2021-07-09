@@ -1,0 +1,4 @@
+curl --header "Content-Type: application/json" \
+  --request POST \
+  --data '{"tag":"iacinovation/smartjet/tiagoramos121@gmailcom","ssid":"LIVE TIM_3322_2G", "pass": "KyxqxYSG", "idplayer" : "2111212121212121", "number_smartjets" : "2"}' \
+  http://192.168.4.1/user_credentials
